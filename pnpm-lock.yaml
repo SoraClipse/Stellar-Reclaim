@@ -1,0 +1,18 @@
+lockfileVersion: '9.0'
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+importers:
+  .:
+    devDependencies:
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+  packages/core: {}
+  packages/ledger: {}
+packages:
+  typescript@5.8.3:
+    resolution: {}
+    engines: {node: '>=14.17'}
+snapshots:
+  typescript@5.8.3: {}

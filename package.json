@@ -1,0 +1,17 @@
+{
+  "name": "stellar-reclaim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {"node": ">=22.16.0"},
+  "scripts": {
+    "test": "node --experimental-strip-types --test packages/*/test/*.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "node scripts/lint.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "example": "node --experimental-strip-types packages/core/src/cli.ts"
+  },
+  "devDependencies": {"typescript": "5.8.3"}
+}

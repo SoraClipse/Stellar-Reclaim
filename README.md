@@ -1,38 +1,44 @@
 # Stellar Reclaim
 
-**A proposed non-custodial protocol for coordinating voluntary refunds of mistaken Stellar payments.**
+A proposed **voluntary**, non-custodial recovery-coordination protocol for mistaken Stellar payments. There is no mechanism to undo an irreversible transfer or compel repayment.
 
-> **Project status: early development.** No recovery workflow is currently deployed, audited or independently tested here. The [open engineering issues](https://github.com/SoraClipse/Stellar-Reclaim/issues) specify what needs to be built and proven before a testnet submission. Opening a recovery request cannot reverse a settled blockchain payment or compel a recipient to cooperate.
+## Current state
 
-## What problem are we addressing?
+This first implementation PR covers Issues #1–#4 only: a signed recovery protocol **specification** (not a signed-request implementation), a working TypeScript workspace, a bounded read-only Stellar Horizon client, and lossless payment normalization. There is **no** deployed product, connected wallet, request API, or actual payment recovery yet. Unit tests use isolated mocked ledger responses; a live network demonstration is future work.
 
-A Stellar user can accidentally send a payment to an unintended recipient, or select the wrong asset/operation. The transfer cannot simply be undone. Users need a way to show the original ledger transaction, ask a recipient to return it voluntarily, establish consent safely, and prove any subsequent refund without handing custody of funds to a platform.
+## Local development
 
-## Planned user workflow
+Requirements: Node >=22.16, pnpm 9.15.9 via Corepack. From repository root:
 
-1. The sender selects the correct Stellar network and identifies an actual payment operation, including its asset identity and destination.
-2. The sender proves control of the sending account and signs a narrowly scoped, expiring recovery request.
-3. A participating recipient wallet (or opt-in inbox) authenticates the true recipient and displays the request without leaking private information.
-4. The recipient can accept or decline. Acceptance **does not** automatically transfer assets; the recipient initiates any voluntary return using their own wallet.
-5. The system confirms actual return payments from ledger evidence and produces a limited verifiable receipt, including partial returns when applicable.
+```sh
+corepack enable
+corepack pnpm install --frozen-lockfile
+corepack pnpm lint
+corepack pnpm typecheck
+corepack pnpm test
+corepack pnpm build
+corepack pnpm example -- --amount 12.3456789
+```
 
-## Core engineering principles
+The example outputs exact stroops without floating-point rounding. Read-only client usage:
 
-- **No custody or reversal claims:** The service never requests a seed phrase, moves funds on behalf of a user, or overrides Stellar finality.
-- **Ledger correctness:** Exact network, operation, destination, amount, asset issuer, and transaction identifiers matter. Unsupported cases must fail clearly.
-- **Anti-impersonation:** Sender and recipient requests and consent require domain/network-bound proofs and replay protection.
-- **Safety:** Protect against spam, harassment, malicious links, duplicate refund credit and private request leakage.
-- **Evidence over simulation:** Document real testnet evidence separately from unit tests and example fixtures.
+```ts
+import {StellarLedgerClient,normalizePayment} from './packages/ledger/src/index.ts';
+const tx = await new StellarLedgerClient('testnet').lookup('YOUR_64_CHARACTER_TRANSACTION_HASH');
+const payment = normalizePayment(tx, 0);
+console.log(payment); // only successful supported payments
+```
 
-## Project planning and contribution
+Never pass a secret seed to this service. The API does not sign or submit transactions. No arbitrary public RPC URLs are accepted; network identity is checked against the Stellar passphrase.
 
-- [Engineering roadmap and issue breakdown](docs/ROADMAP.md)
-- [Open issues](https://github.com/SoraClipse/Stellar-Reclaim/issues)
-- [Contributor guide](CONTRIBUTING.md)
-- [Security reporting](SECURITY.md)
+## Documentation
 
-All P0 issues must be implemented and validated before the maintainer describes a functioning testnet submission. P1 issues are future contributor opportunities, not rewards or approved program tasks. This repository is independent and does not imply endorsement by the Stellar Development Foundation or Drips.
+- [Product protocol and sequence](docs/product-spec.md)
+- [Threat model and unsupported cases](docs/threat-model.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Issues](https://github.com/SoraClipse/Stellar-Reclaim/issues)
+- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 ## License
 
-See [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE). Independent open-source project, not an official SDF or Drips product.
