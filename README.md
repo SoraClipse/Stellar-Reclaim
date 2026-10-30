@@ -6,7 +6,9 @@ A proposed **voluntary**, non-custodial recovery-coordination protocol for mista
 
 This repository has a working TypeScript workspace, a bounded read-only Stellar Horizon client, and lossless payment normalization from Issues #1–#4. The Issues #5–#8 contribution adds domain/network-bound Ed25519 ownership challenges, versioned canonical recovery request signing and verification, replay protection, and an SQLite migration plus durable request/decision/receipt persistence.
 
-**Not yet available:** deployed product, wallet integration, public request API, recipient inbox, validated recipient consent, or genuine testnet refund reconciliation. Unit tests use generated keys, isolated mock ledger responses and a temporary local database, not real Stellar network settlement. No private keys are held by this service.
+Issues #9–#12 additionally implement a fail-closed recovery lifecycle, injectable sender/recipient API handlers, and operation-level voluntary refund matching. These modules are **not deployed**: the API still requires wiring to cryptographic wallet and request verification, consent verification, durable atomic persistence, and rate limiting before use.
+
+**Not yet available:** deployed product, integrated wallet, live request/consent service, or genuine testnet refund reconciliation. Unit tests use generated keys, isolated mock ledger responses and a temporary local database, not real Stellar network settlement. No private keys are held by this service.
 
 ## Local development
 
@@ -39,6 +41,7 @@ Never pass a secret seed to this service. The API does not sign or submit transa
 
 - [Product protocol and sequence](docs/product-spec.md)
 - [Authenticated requests and storage](docs/security-protocol.md)
+- [Recovery coordination APIs and refund matching](docs/implementation-9-12.md)
 - [Threat model and unsupported cases](docs/threat-model.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Issues](https://github.com/SoraClipse/Stellar-Reclaim/issues)
