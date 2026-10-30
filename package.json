@@ -6,7 +6,7 @@
   "packageManager": "pnpm@9.15.9",
   "engines": {"node": ">=22.16.0"},
   "scripts": {
-    "test": "node --experimental-strip-types --test packages/*/test/*.test.mjs",
+    "test": "node --experimental-strip-types --test packages/*/test/*.test.mjs apps/api/test/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "node scripts/lint.mjs",
     "build": "tsc -p tsconfig.build.json",
