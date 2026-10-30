@@ -74,7 +74,7 @@ test('muxed original sender explicitly unsupported', async () => withStore(async
   const muxedRequest={...request,originalSender:sender.muxed};
   const muxedLookup={...lookup,operations:[{...lookup.operations[0],from_muxed:sender.muxed,from_muxed_id:'7'}]};
   await assert.rejects(verify(store,muxedRequest,muxedLookup,sender),{kind:'unsupported'});
-});
+}));
 
 
 test('published canonical digest golden vector is stable', async () => {

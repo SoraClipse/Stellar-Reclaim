@@ -23,3 +23,7 @@ Network selection is explicit and a Horizon network passphrase must match. Horiz
 ## Limitations of this milestone
 
 This code is **read-only**. No funds, secrets, approval, signing, request creation, settlement, custody or live RPC test evidence. Some valid Stellar operations are intentionally rejected rather than guessed. Do not treat an unsupported refund as a bug in a deployed consumer recovery service; this foundational component is not a deployed consumer service.
+
+## New coordination-layer requirements (#9–#12)
+
+A typed HTTP router and deterministic state machine are included, but the router is only secure when deployed with cryptographically verified wallet/session and payload/consent signers, fail-closed rate limiting, and durable atomic unique constraints. Acceptance and submitted refund hashes never count as settlement. Actual refund reconciliation requires a finalized successful matching ledger payment and an atomic, globally unique operation claim across requests. Unit mocks are not production controls or live testnet evidence.
