@@ -1,0 +1,5 @@
+# Recovery API and UI prototype
+
+Run: `corepack pnpm install --frozen-lockfile`, `corepack pnpm test`, `corepack pnpm api`. Open `/request`, `/inbox` or `/recoveries` on port 8787.
+
+Requests and signed authentication challenges are ephemeral, in-memory only. The API verifies one-time Ed25519 wallet ownership, checks actual payment source on Horizon, limits caller/recipient/sender traffic, redacts public receipts and does not log sensitive inputs. The browser expects a Freighter-style wallet exposing `getAddress()` and `signMessage()` with hexadecimal 64-byte signature response. Other wallet adapters require integration. The web confirmation address is separately checked against the real ledger destination by the API. No automatic funds movement, real settlement verification, durable storage or production-grade distributed throttling exists. Require HTTPS, persistent transactional storage, distributed abuse controls and reconciliation before deployment. Never claim `accepted` proves refunded.
