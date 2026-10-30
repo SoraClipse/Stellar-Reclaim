@@ -62,3 +62,5 @@ export function decodeAccount(value:string):{base:string;muxed:boolean;id?:strin
   return {base:classicFromKey(bytes.slice(1,33)),muxed:true,id:ident.toString()};
 }
 export function assertAccount(account:string):string {decodeAccount(account);return account;}
+
+export * from './state-machine.ts';

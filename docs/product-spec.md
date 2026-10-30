@@ -1,6 +1,6 @@
 # Stellar Reclaim — V1 protocol boundary
 
-Status: **specification plus read-only ledger and normalization foundation**. Signed requests, wallets, backend, consent, notifications, and refund settlement are not built by Issues #1–#4. Never imply a payment can be reversed.
+Status: **specification, read-only ledger normalization and a new injectable recovery coordination layer**. Issues #9–#12 implement state transitions, HTTP handler contracts and refund-operation matching, but do not yet provide deployed authentication, durable storage, running server, notifications or live settlement. Never imply a payment can be reversed.
 
 ## Actors and proof
 
@@ -13,7 +13,7 @@ Status: **specification plus read-only ledger and normalization foundation**. Si
 
 User explicitly chooses `testnet` or `public`. Horizon root passphrase is verified; the client reads a finalized successful transaction and its operation list. Operation index is zero-based and preserves identity. `payment`, `path_payment_strict_receive` and `path_payment_strict_send` are normalized with source/destination, XLM or exact issuer-qualified credit asset, exact 7-decimal amounts and optional distinct source asset/amount for path payments. Unsupported/malformed types fail closed; `invoke_host_function` is not treated as a payment. Classic G and muxed M address identities are retained and checked against their base account and muxed identifier.
 
-## Future state sequence (not yet implemented)
+## Future end-to-end deployment sequence (not yet deployed)
 
 ```mermaid
 sequenceDiagram
@@ -31,7 +31,7 @@ sequenceDiagram
   end
 ```
 
-A recovery request is neither an enforceable debt nor an automatic transfer. A partial or missing refund is not a completed recovery. Signing/consent/settlement must be built in later PRs.
+A recovery request is neither an enforceable debt nor an automatic transfer. A partial or missing refund is not a completed recovery. The API and state/settlement modules require external wallet verification and durable transaction adapters from Issues #5–#8 before deployment.
 
 ## Unsupported cases
 
