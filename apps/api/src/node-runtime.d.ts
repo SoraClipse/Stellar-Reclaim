@@ -1,11 +1,9 @@
-/** Minimal Node runtime type surface for this dependency-free workspace.
- * Replace with @types/node when package management permits dependency updates.
- */
-declare class Buffer extends Uint8Array {
- static from(value: string | Uint8Array, encoding?: string):Buffer;
- static concat(chunks: readonly Uint8Array[]):Buffer;
- toString(encoding?:string):string;
-}
+/** Narrow Node runtime declarations for this dependency-free TypeScript workspace. */
+type Buffer = Uint8Array & {toString(encoding?:string):string};
+declare const Buffer:{
+ from(value:string|Uint8Array,encoding?:string):Buffer;
+ concat(chunks:readonly Uint8Array[]):Buffer;
+};
 declare module 'node:crypto' {
  export function createHash(algorithm:string):{update(data:string):{digest(encoding:'hex'):string}};
  export function randomBytes(size:number):Buffer;
@@ -16,7 +14,7 @@ declare module 'node:crypto' {
 }
 declare module 'node:http' {
  export interface IncomingMessage extends AsyncIterable<Uint8Array>{
-  url?:string;method?:string;headers:Record<string,string|string[]|undefined>;socket:{remoteAddress?:string};
+  url?:string;method?:string;headers:Record<string,string|undefined>;socket:{remoteAddress?:string};
  }
  export interface ServerResponse {
   writeHead(status:number,headers:Record<string,string>):void;
