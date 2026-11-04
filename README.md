@@ -11,13 +11,13 @@ recipient**. A recipient may refuse without any protocol penalty.
 
 Implemented in this repository: exact stroop arithmetic, bounded read-only
 Horizon lookups and payment normalization, signed authentication primitives,
-recovery lifecycle logic, prototype API/UI routes, and unit tests for operation
-matching, consent transitions and refund accounting.
+recovery lifecycle logic, an authenticated and SQLite-backed Testnet API, and
+unit tests for operation matching, consent transitions and refund accounting.
 
 **Not implemented/verified:** an audited or deployed service, full wallet
-compatibility, end-to-end durable production settlement, live Testnet recovery
-evidence, or automatic payment execution. Local API state and the demo UI
-are not a production persistence or security boundary. Unit tests and fixtures
+compatibility, automatic settlement indexing, live Testnet recovery
+evidence, or automatic payment execution. The old ephemeral API was disabled; the prototype UI is not connected to the
+new secure endpoints. Durable storage does not by itself establish production readiness. Unit tests and fixtures
 are not proof of live Stellar settlement.
 
 ## Supported payments and wallets
@@ -27,9 +27,9 @@ path-payment operations on explicitly selected Stellar networks; the
 voluntary refund matcher currently accepts **classic payment operations**
 only, with matching network, asset, issuer and return destination. Contract
 invocations and arbitrary operations are not eligible for refund matching.
-Only wallets providing compatible signed Ed25519 messages can use the
-prototype login workflow; Freighter-style `getAddress()/signMessage()`
-is the documented browser interface, **not a certification of compatibility**.
+The secure API uses domain/network-bound **SEP-53** Ed25519 authentication and accepts
+canonical base64 or hex-encoded signatures. A real Freighter wallet adapter has **not**
+been independently tested or integrated; the legacy browser prototype is not connected.
 Never enter or upload a wallet seed phrase.
 
 ## Fresh-clone development
@@ -45,6 +45,8 @@ corepack pnpm lint
 corepack pnpm typecheck
 corepack pnpm test
 corepack pnpm build
+export RECLAIM_ORIGIN=http://127.0.0.1:8787
+export RECLAIM_DB_PATH=./reclaim-testnet.sqlite
 corepack pnpm api
 ```
 
@@ -61,13 +63,14 @@ honesty or availability of a Horizon server. Users must independently confirm
 recipient identity, transaction hash and asset issuer. Recovery notes and
 transaction metadata can be sensitive; do not publish identifying details,
 use public CI artifacts for private evidence, or assume public ledgers are
-private. Local prototype storage and abuse limits do not support distributed
-production guarantees. A recipient's `accepted` status is **not** a refund;
+private. SQLite persists signed requests, recipient decisions and manually verified refund operations, but distributed abuse
+limits, production privacy controls and verified refund reconciliation remain unfinished. A recipient's `accepted` status is **not** a refund;
 a verified new transaction is required, and duplicate crediting must be
 prevented by transactional persistent storage.
 
 ## Documentation
 
+- [Authenticated SQLite Testnet API and launch gates](docs/operations/secure-api.md)
 - [Development and deployment operations](docs/operations/deployment.md)
 - [Opt-in real Testnet verification (evidence pending)](docs/verification/testnet.md)
 - [Contribution guide](CONTRIBUTING.md)

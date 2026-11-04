@@ -25,7 +25,8 @@ function samePayment(request: RecoveryRequest, payment: Payment): boolean {
 
 /** Only call with a finalized lookup returned by the configured StellarLedgerClient. */
 export async function verifyRecoveryRequest(input: {request: unknown; signature: string; lookup: Lookup;
-  domain: string; now: number; store: VerifiedRequestStore}): Promise<{digest: string; request: RecoveryRequest}> {
+  domain: string; now: number; store: VerifiedRequestStore;
+  signatureVerifier?: (account:string,signature:string,payload:Uint8Array)=>Promise<boolean>}): Promise<{digest: string; request: RecoveryRequest}> {
   const {request} = canonicalizeRecoveryRequest(input.request);
   if (request.domain !== input.domain || !Number.isSafeInteger(input.now) || input.now < request.issuedAt - 30 || input.now >= request.expiresAt) {
     throw new RequestVerificationError('invalid', 'Wrong domain, not yet valid, or expired');
@@ -37,7 +38,7 @@ export async function verifyRecoveryRequest(input: {request: unknown; signature:
   if (request.network !== input.lookup.network) throw new RequestVerificationError('ledger_mismatch', 'Cross-network payment reference');
   const payment = normalizePayment(input.lookup, request.operationIndex);
   if (!samePayment(request, payment)) throw new RequestVerificationError('ledger_mismatch', 'Signed request does not match finalized payment operation');
-  const valid = await verifyAccountSignature(request.originalSender, input.signature, requestSigningBytes(request));
+  const valid = await (input.signatureVerifier ?? verifyAccountSignature)(request.originalSender, input.signature, requestSigningBytes(request));
   if (!valid) throw new RequestVerificationError('invalid', 'Signature does not belong to the original payment sender');
   const digest = await recoveryRequestDigest(request);
   const saved = await input.store.recordVerifiedRequest(request, digest, input.signature);

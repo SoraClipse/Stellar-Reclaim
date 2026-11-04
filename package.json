@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.build.json",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "example": "node --experimental-strip-types packages/core/src/cli.ts",
-    "api": "node --experimental-strip-types apps/api/src/server.ts"
+    "api": "node --experimental-strip-types apps/api/src/server.mjs"
   },
   "devDependencies": {
     "typescript": "5.8.3"
