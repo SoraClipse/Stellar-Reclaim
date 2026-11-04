@@ -15,7 +15,7 @@ recovery lifecycle logic, an authenticated and SQLite-backed Testnet API, and
 unit tests for operation matching, consent transitions and refund accounting.
 
 **Not implemented/verified:** an audited or deployed service, full wallet
-compatibility, end-to-end durable production settlement, live Testnet recovery
+compatibility, automatic settlement indexing, live Testnet recovery
 evidence, or automatic payment execution. The old ephemeral API was disabled; the prototype UI is not connected to the
 new secure endpoints. Durable storage does not by itself establish production readiness. Unit tests and fixtures
 are not proof of live Stellar settlement.
@@ -63,7 +63,7 @@ honesty or availability of a Horizon server. Users must independently confirm
 recipient identity, transaction hash and asset issuer. Recovery notes and
 transaction metadata can be sensitive; do not publish identifying details,
 use public CI artifacts for private evidence, or assume public ledgers are
-private. SQLite persists signed requests and recipient decisions, but distributed abuse
+private. SQLite persists signed requests, recipient decisions and manually verified refund operations, but distributed abuse
 limits, production privacy controls and verified refund reconciliation remain unfinished. A recipient's `accepted` status is **not** a refund;
 a verified new transaction is required, and duplicate crediting must be
 prevented by transactional persistent storage.
