@@ -39,7 +39,7 @@ Passing CI demonstrates only the scoped checks, not a formal security audit.
 
 ## Before any public deployment
 
-Complete live wallet interoperability and verified refund reconciliation,
+Complete live wallet interoperability, automatic ledger indexing and multi-provider settlement reconciliation,
 trusted proxy/HTTPS configuration,
 distributed abuse controls, careful privacy handling and security review.
 Confirm cross-wallet compatibility independently. Never put wallet secret
