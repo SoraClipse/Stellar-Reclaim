@@ -26,10 +26,10 @@ const payload=()=>({
  asset:{type:'native'},originalAmount:'10',requestedAmount:'4',returnDestination:sender.account,
  nonce:'b'.repeat(64),issuedAt:time,expiresAt:time+3600
 });
-function fixture(){
+function fixture(extraLookups={}){
  const dir=mkdtempSync(join(tmpdir(),'reclaim-service-'));
  const path=join(dir,'api.sqlite');
- const start=()=>createSecureService({dbPath:path,origin,now:()=>time,ledgerFactory:()=>({lookup:async h=>{if(h!==hash)throw Error('not_found');return original;}})});
+ const start=()=>createSecureService({dbPath:path,origin,now:()=>time,ledgerFactory:()=>({lookup:async h=>{if(h===hash)return original;if(extraLookups[h])return extraLookups[h];throw Error('not_found');}})});
  return {start,cleanup:()=>rmSync(dir,{recursive:true,force:true})};
 }
 async function call(s,method,path,body,token){
@@ -103,6 +103,45 @@ test('signed recovery request cannot be silently tampered or signed by a differe
   assert.equal((await call(s,'POST','/v2/requests',{request:req,signature:sig},loginSender.token)).status,403);
   assert.equal((await call(s,'POST','/v2/requests',{request:{...req,network:'public'},signature:sig},loginSender.token)).status,403);
   assert.equal((await call(s,'GET','/v2/receipts/'+'f'.repeat(64))).status,404);
+  s.close();
+ }finally{f.cleanup();}
+});
+
+test('ledger-verified 4+6 XLM refund is durable, consent-gated and globally deduplicated',async()=>{
+ const first='d'.repeat(64),second='e'.repeat(64),wrong='f'.repeat(64);
+ const observed=(tx,amount,to=sender.account)=>({
+  network:'testnet',transaction:{hash:tx,successful:true,ledger:18,operation_count:1,source_account:recipient.account},
+  operations:[{type:'payment',transaction_hash:tx,transaction_successful:true,from:recipient.account,to,amount,asset_type:'native'}]
+ });
+ const f=fixture({[first]:observed(first,'4'),[second]:observed(second,'6'),[wrong]:observed(wrong,'1',outsider.account)});
+ try{
+  let s=f.start();const from=await login(s,sender),to=await login(s,recipient);
+  const request={...payload(),requestedAmount:'10',nonce:'c'.repeat(64)};
+  const signature=sign(null,Buffer.from(requestSigningBytes(request)),sender.privateKey).toString('base64');
+  const created=await call(s,'POST','/v2/requests',{request,signature},from.token);
+  assert.equal(created.status,201,JSON.stringify(created.data));
+  const digest=created.data.digest;
+  const proof=(transactionHash)=>({digest,transactionHash,operationIndex:0});
+  assert.equal((await call(s,'POST','/v2/refunds',proof(first),to.token)).status,409,'consent required');
+  const dec={digest,decision:'accept',nonce:'e'.repeat(64)};
+  const signed=sign(null,Buffer.from(decisionSigningBytes({domain:origin,network:'testnet',...dec})),recipient.privateKey).toString('base64');
+  assert.equal((await call(s,'POST','/v2/decisions',{...dec,signature:signed},to.token)).status,200);
+  assert.equal((await call(s,'POST','/v2/refunds',proof(wrong),to.token)).status,422,'wrong refund destination');
+  const partial=await call(s,'POST','/v2/refunds',proof(first),from.token);
+  assert.equal(partial.status,200,JSON.stringify(partial.data));
+  assert.equal(partial.data.status,'partially_refunded');
+  assert.equal(partial.data.refundedStroops,'40000000');
+  assert.equal(partial.data.refundVerified,true);
+  assert.equal((await call(s,'POST','/v2/refunds',proof(first),to.token)).status,409,'duplicate operation');
+  s.close();s=f.start();
+  const final=await call(s,'POST','/v2/refunds',proof(second),to.token);
+  assert.equal(final.status,200,JSON.stringify(final.data));
+  assert.equal(final.data.status,'refunded');
+  assert.equal(final.data.refundedStroops,'100000000');
+  const receipt=await call(s,'GET','/v2/receipts/'+digest);
+  assert.equal(receipt.data.refundVerified,true);
+  assert.equal(receipt.data.refundedOperations.length,2);
+  assert.equal((await call(s,'POST','/v2/refunds',proof(first),to.token)).status,409);
   s.close();
  }finally{f.cleanup();}
 });
