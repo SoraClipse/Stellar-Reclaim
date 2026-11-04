@@ -40,18 +40,18 @@ async function call(s,method,path,body,token){
  const res=await s.handle(new Request(origin+path,{method,headers:{...(body?{'content-type':'application/json'}:{}),...(token?{authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})}));
  return {status:res.status,data:await res.json()};
 }
-async function login(s,actor){
+async function login(s,actor,hex=false){
  const issued=await call(s,'POST','/v2/challenges',{network:'testnet',account:actor.account});
  assert.equal(issued.status,200,JSON.stringify(issued.data));
  const sig=sepSign(Buffer.from(issued.data.message),actor.privateKey);
- const auth=await call(s,'POST','/v2/auth',{challenge:issued.data.challenge,signature:sig});
+ const auth=await call(s,'POST','/v2/auth',{challenge:issued.data.challenge,signature:hex?Buffer.from(sig,'base64').toString('hex'):sig});
  assert.equal(auth.status,200,JSON.stringify(auth.data));
  assert.match(auth.data.token,/^[0-9a-f]{64}$/);
  return {token:auth.data.token,challenge:issued.data.challenge,signature:sig};
 }
 test('durable sender request, authenticated recipient consent, replay defense and redacted receipt',async()=>{
  const f=fixture();try{
-  let s=f.start(),from=await login(s,sender),to=await login(s,recipient),stranger=await login(s,outsider);
+  let s=f.start(),from=await login(s,sender),to=await login(s,recipient,true),stranger=await login(s,outsider);
   assert.equal((await call(s,'POST','/v2/auth',{challenge:from.challenge,signature:from.signature})).status,401);
   const request=payload(),signature=sepSign(Buffer.from(requestSigningBytes(request)),sender.privateKey);
   const denied=await call(s,'POST','/v2/requests',{request,signature},stranger.token);
@@ -89,6 +89,8 @@ test('domain and network-bound authentication is rejected across environments',a
   assert.equal((await call(s,'POST','/v2/challenges',{network:'public',account:sender.account})).status,403);
   assert.equal((await call(s,'POST','/v2/challenges',{network:'testnet',account:'bad'})).status,400);
   const issued=await call(s,'POST','/v2/challenges',{network:'testnet',account:sender.account});
+  const raw=sign(null,Buffer.from(issued.data.message),sender.privateKey).toString('base64');
+  assert.equal((await call(s,'POST','/v2/auth',{challenge:issued.data.challenge,signature:raw})).status,401,'raw signatures are not SEP-53');
   const sig=sepSign(Buffer.from(issued.data.message),outsider.privateKey);
   const r=await call(s,'POST','/v2/auth',{challenge:issued.data.challenge,signature:sig});
   assert.equal(r.status,401);
