@@ -5,18 +5,26 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - run: corepack enable
-      - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm lint
-      - run: corepack pnpm typecheck
-      - run: corepack pnpm test
-      - run: corepack pnpm build
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Reproducible verification (no external wallet secrets)
+        run: bash scripts/verify.sh
+      - name: Dependency audit
+        run: corepack pnpm audit --audit-level high
