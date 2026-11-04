@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,sign} from 'node:crypto';
+import {generateKeyPairSync,sign,createHash} from 'node:crypto';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -16,6 +16,10 @@ function stellarAccount(publicKey){
  if(bits)out+=abc[(value<<(5-bits))&31];
  return out;
 }
+const sepSign=(message,key)=>{
+ const digest=createHash('sha256').update(Buffer.concat([Buffer.from('Stellar Signed Message:\\n'),message])).digest();
+ return sign(null,digest,key).toString('base64');
+};
 const who=()=>{const {publicKey,privateKey}=generateKeyPairSync('ed25519');return {account:stellarAccount(publicKey),privateKey};};
 const sender=who(),recipient=who(),outsider=who(),origin='http://127.0.0.1:8787',hash='a'.repeat(64);
 const original={network:'testnet',transaction:{hash,successful:true,ledger:5,operation_count:1,source_account:sender.account},
@@ -39,7 +43,7 @@ async function call(s,method,path,body,token){
 async function login(s,actor){
  const issued=await call(s,'POST','/v2/challenges',{network:'testnet',account:actor.account});
  assert.equal(issued.status,200,JSON.stringify(issued.data));
- const sig=sign(null,Buffer.from(issued.data.message),actor.privateKey).toString('base64');
+ const sig=sepSign(Buffer.from(issued.data.message),actor.privateKey);
  const auth=await call(s,'POST','/v2/auth',{challenge:issued.data.challenge,signature:sig});
  assert.equal(auth.status,200,JSON.stringify(auth.data));
  assert.match(auth.data.token,/^[0-9a-f]{64}$/);
@@ -49,7 +53,7 @@ test('durable sender request, authenticated recipient consent, replay defense an
  const f=fixture();try{
   let s=f.start(),from=await login(s,sender),to=await login(s,recipient),stranger=await login(s,outsider);
   assert.equal((await call(s,'POST','/v2/auth',{challenge:from.challenge,signature:from.signature})).status,401);
-  const request=payload(),signature=sign(null,Buffer.from(requestSigningBytes(request)),sender.privateKey).toString('base64');
+  const request=payload(),signature=sepSign(Buffer.from(requestSigningBytes(request)),sender.privateKey);
   const denied=await call(s,'POST','/v2/requests',{request,signature},stranger.token);
   assert.equal(denied.status,403);
   const made=await call(s,'POST','/v2/requests',{request,signature},from.token);
@@ -62,7 +66,7 @@ test('durable sender request, authenticated recipient consent, replay defense an
   assert.equal(inbox.data.requests[0].digest,digest);
   assert.equal((await call(s,'POST','/v2/decisions',{digest,decision:'accept',nonce:'c'.repeat(64),signature:'bad'},to.token)).status,400);
   const decision={digest,decision:'accept',nonce:'c'.repeat(64)};
-  const signed=sign(null,Buffer.from(decisionSigningBytes({domain:origin,network:'testnet',...decision})),recipient.privateKey).toString('base64');
+  const signed=sepSign(Buffer.from(decisionSigningBytes({domain:origin,network:'testnet',...decision})),recipient.privateKey);
   assert.equal((await call(s,'POST','/v2/decisions',{...decision,signature:signed},from.token)).status,404);
   const accepted=await call(s,'POST','/v2/decisions',{...decision,signature:signed},to.token);
   assert.equal(accepted.status,200,JSON.stringify(accepted.data));
@@ -85,7 +89,7 @@ test('domain and network-bound authentication is rejected across environments',a
   assert.equal((await call(s,'POST','/v2/challenges',{network:'public',account:sender.account})).status,403);
   assert.equal((await call(s,'POST','/v2/challenges',{network:'testnet',account:'bad'})).status,400);
   const issued=await call(s,'POST','/v2/challenges',{network:'testnet',account:sender.account});
-  const sig=sign(null,Buffer.from(issued.data.message),outsider.privateKey).toString('base64');
+  const sig=sepSign(Buffer.from(issued.data.message),outsider.privateKey);
   const r=await call(s,'POST','/v2/auth',{challenge:issued.data.challenge,signature:sig});
   assert.equal(r.status,401);
   const badOrigin=await s.handle(new Request(origin+'/v2/challenges',{method:'POST',headers:{origin:'https://malicious.example','content-type':'application/json'},body:JSON.stringify({account:sender.account,network:'testnet'})}));
@@ -99,7 +103,7 @@ test('signed recovery request cannot be silently tampered or signed by a differe
  const f=fixture();try{
   const s=f.start(),loginSender=await login(s,sender);
   const req=payload();
-  const sig=sign(null,Buffer.from(requestSigningBytes(req)),outsider.privateKey).toString('base64');
+  const sig=sepSign(Buffer.from(requestSigningBytes(req)),outsider.privateKey);
   assert.equal((await call(s,'POST','/v2/requests',{request:req,signature:sig},loginSender.token)).status,403);
   assert.equal((await call(s,'POST','/v2/requests',{request:{...req,network:'public'},signature:sig},loginSender.token)).status,403);
   assert.equal((await call(s,'GET','/v2/receipts/'+'f'.repeat(64))).status,404);
@@ -117,14 +121,14 @@ test('ledger-verified 4+6 XLM refund is durable, consent-gated and globally dedu
  try{
   let s=f.start();const from=await login(s,sender),to=await login(s,recipient);
   const request={...payload(),requestedAmount:'10',nonce:'c'.repeat(64)};
-  const signature=sign(null,Buffer.from(requestSigningBytes(request)),sender.privateKey).toString('base64');
+  const signature=sepSign(Buffer.from(requestSigningBytes(request)),sender.privateKey);
   const created=await call(s,'POST','/v2/requests',{request,signature},from.token);
   assert.equal(created.status,201,JSON.stringify(created.data));
   const digest=created.data.digest;
   const proof=(transactionHash)=>({digest,transactionHash,operationIndex:0});
   assert.equal((await call(s,'POST','/v2/refunds',proof(first),to.token)).status,409,'consent required');
   const dec={digest,decision:'accept',nonce:'e'.repeat(64)};
-  const signed=sign(null,Buffer.from(decisionSigningBytes({domain:origin,network:'testnet',...dec})),recipient.privateKey).toString('base64');
+  const signed=sepSign(Buffer.from(decisionSigningBytes({domain:origin,network:'testnet',...dec})),recipient.privateKey);
   assert.equal((await call(s,'POST','/v2/decisions',{...dec,signature:signed},to.token)).status,200);
   assert.equal((await call(s,'POST','/v2/refunds',proof(wrong),to.token)).status,422,'wrong refund destination');
   const partial=await call(s,'POST','/v2/refunds',proof(first),from.token);
