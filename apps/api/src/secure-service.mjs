@@ -5,8 +5,8 @@
 import {createHash, randomBytes} from 'node:crypto';
 import {RecoveryStorage} from './storage.mjs';
 import {throttle} from './middleware/abuse.ts';
-import {assertDomain, issueWalletChallenge, verifyWalletChallenge, challengeSigningBytes} from '../../../packages/auth/src/challenge.ts';
-import {verifyAccountSignature} from '../../../packages/auth/src/crypto.ts';
+import {assertDomain, issueWalletChallenge, validateChallenge, challengeSigningBytes} from '../../../packages/auth/src/challenge.ts';
+import {verifySep53AccountSignature} from '../../../packages/auth/src/sep53.ts';
 import {canonicalizeRecoveryRequest, requestSigningBytes} from '../../../packages/protocol/src/request.ts';
 import {verifyRecoveryRequest, RequestVerificationError} from '../../../packages/protocol/src/verify-request.ts';
 import {PASSPHRASE} from '../../../packages/core/src/index.ts';
@@ -81,8 +81,12 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
     if(challenge.network!==network)throw errors(403,'wrong_network');
     limiter('auth',String(challenge.account),10,60000);
     let valid=false;
-    try{valid=await verifyWalletChallenge(db,challenge,body.signature,{domain:origin,network,now:now()});}
-    catch{throw errors(401,'invalid_signature_or_replay');}
+    try{
+     validateChallenge(challenge,now(),origin,network);
+     const message=challengeSigningBytes(challenge);
+     valid=(await verifySep53AccountSignature(challenge.account,body.signature,message))
+       && db.consumeChallenge(challenge,now());
+    }catch{throw errors(401,'invalid_signature_or_replay');}
     if(!valid)throw errors(401,'invalid_signature_or_replay');
     const token=randomBytes(32).toString('hex');
     db.db.prepare('INSERT INTO api_sessions(token_hash,account,network,origin,expires_at) VALUES(?,?,?,?,?)')
@@ -100,7 +104,7 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
     // only direct classic payments are eligible for recovery requests.
     const payment=normalizePayment(lookup,signed.operationIndex);
     if(payment.type!=='payment')throw errors(422,'unsupported_payment_type');
-    const saved=await verifyRecoveryRequest({request:signed,signature:body.signature,lookup,domain:origin,now:now(),store:db});
+    const saved=await verifyRecoveryRequest({request:signed,signature:body.signature,lookup,domain:origin,now:now(),store:db,signatureVerifier:verifySep53AccountSignature});
     return response(201,{digest:saved.digest,status:'requested',refundVerified:false});
    }
    if(request.method==='GET'&&url.pathname==='/v2/inbox'){
@@ -151,7 +155,7 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
     if(row.expires_at<=now())throw errors(410,'request_expired');
     limiter('decision',account,20,60000);
     const bytes=decisionSigningBytes({domain:origin,network,digest,decision,nonce});
-    if(!await verifyAccountSignature(account,signature,bytes))throw errors(401,'invalid_decision_signature');
+    if(!await verifySep53AccountSignature(account,signature,bytes))throw errors(401,'invalid_decision_signature');
     try{db.recordRecipientDecision({digest,recipient:account,decision,signature,signedAt:now()});}
     catch(e){if(/UNIQUE constraint failed/.test(String(e?.message)))throw errors(409,'decision_already_recorded');throw e;}
     return response(200,{digest,status:decision,requiresSeparatePayment:true,refundVerified:false});
