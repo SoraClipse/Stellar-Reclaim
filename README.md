@@ -27,9 +27,9 @@ path-payment operations on explicitly selected Stellar networks; the
 voluntary refund matcher currently accepts **classic payment operations**
 only, with matching network, asset, issuer and return destination. Contract
 invocations and arbitrary operations are not eligible for refund matching.
-The secure API uses domain/network-bound Ed25519 authentication and requires
-correctly encoded signed messages. A real Freighter SEP-53 adapter has **not**
-been certified or integrated; the legacy browser prototype is not connected.
+The secure API uses domain/network-bound **SEP-53** Ed25519 authentication and accepts
+canonical base64 or hex-encoded signatures. A real Freighter wallet adapter has **not**
+been independently tested or integrated; the legacy browser prototype is not connected.
 Never enter or upload a wallet seed phrase.
 
 ## Fresh-clone development
