@@ -11,6 +11,8 @@ import {canonicalizeRecoveryRequest, requestSigningBytes} from '../../../package
 import {verifyRecoveryRequest, RequestVerificationError} from '../../../packages/protocol/src/verify-request.ts';
 import {PASSPHRASE} from '../../../packages/core/src/index.ts';
 import {normalizePayment} from '../../../packages/ledger/src/normalize.ts';
+import {matchVoluntaryRefund,RefundMatchError} from '../../../packages/ledger/src/refund-matcher.ts';
+import {VerifiedRefundStore,RefundStoreError} from './refund-store.mjs';
 import {StellarLedgerClient, LedgerError} from '../../../packages/ledger/src/client.ts';
 
 const HEX64=/^[0-9a-f]{64}$/;
@@ -36,6 +38,7 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
  assertDomain(origin);
  if(network!=='testnet')throw new Error('Only testnet is enabled until verified mainnet readiness');
  const db=new RecoveryStorage(dbPath);
+ const verifiedRefunds=new VerifiedRefundStore(db.db);
  db.db.exec(`CREATE TABLE IF NOT EXISTS api_sessions(
    token_hash TEXT PRIMARY KEY CHECK(length(token_hash)=64),
    account TEXT NOT NULL, network TEXT NOT NULL CHECK(network IN ('testnet','public')),
@@ -111,6 +114,34 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
     });
     return response(200,{requests});
    }
+   if(request.method==='POST'&&url.pathname==='/v2/refunds'){
+    const account=principal(request),body=await json(request);
+    if(typeof body.digest!=='string'||!HEX64.test(body.digest)||
+       typeof body.transactionHash!=='string'||!HEX64.test(body.transactionHash)||
+       !Number.isSafeInteger(body.operationIndex)||body.operationIndex<0||body.operationIndex>=100)
+      throw errors(400,'invalid_refund_reference');
+    const row=getRequest.get(body.digest);
+    if(!row||row.network!==network)throw errors(404,'not_found');
+    const signedRequest=JSON.parse(row.canonical_json);
+    if(![signedRequest.originalSender,signedRequest.recipient].includes(account))
+      throw errors(404,'not_found');
+    limiter('refund-proof',account,15,60000);
+    if(signedRequest.transactionHash===body.transactionHash&&signedRequest.operationIndex===body.operationIndex)
+      throw errors(422,'self_refund');
+    // Both transactions must be verified against finalized Horizon operations.
+    const client=ledgerFactory(network);
+    const original=normalizePayment(await client.lookup(signedRequest.transactionHash),signedRequest.operationIndex);
+    if(original.type!=='payment')throw errors(422,'unsupported_payment_type');
+    const observed=normalizePayment(await client.lookup(body.transactionHash),body.operationIndex);
+    const matched=matchVoluntaryRefund(original,observed,signedRequest.returnDestination);
+    if(original.source!==signedRequest.originalSender||original.destination!==signedRequest.recipient||
+       original.amount!==signedRequest.originalAmount||
+       JSON.stringify(original.asset)!==JSON.stringify(signedRequest.asset))
+      throw errors(422,'original_payment_mismatch');
+    const progress=verifiedRefunds.apply({digest:body.digest,refund:{network,transactionHash:observed.transactionHash,
+      operationIndex:observed.operationIndex,stroops:matched.amountStroops},at:now()});
+    return response(200,{digest:body.digest,...progress});
+   }
    if(request.method==='POST'&&url.pathname==='/v2/decisions'){
     const account=principal(request),body=await json(request);
     const {digest,decision,nonce,signature}=body;
@@ -129,12 +160,17 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
    if(request.method==='GET'&&receipt){
     const row=receiptStmt.get(receipt[1]);
     if(!row)throw errors(404,'not_found');
-    return response(200,{digest:row.digest,network:row.network,transactionHash:row.transaction_hash,operationIndex:row.operation_index,
-      status:row.decision??'requested',refundVerified:false,note:'Consent is not payment. A separate independently verified Stellar transaction is required.'});
+    const progress=verifiedRefunds.progress(row.digest);
+    return response(200,{digest:row.digest,...progress,
+      note:'Only independently matched finalized transfers count toward verified refunds. Consent alone is not payment.'});
    }
    throw errors(404,'not_found');
   } catch(e) {
    if(e?.status)return response(e.status,{error:e.code});
+   if(e instanceof RefundStoreError){
+    return response(['duplicate_refund','overpayment','not_accepted'].includes(e.code)?409:e.code==='not_found'?404:400,{error:e.code});
+   }
+   if(e instanceof RefundMatchError)return response(422,{error:'refund_'+e.code});
    if(e instanceof RequestVerificationError){
     const code=e.kind;return response(code==='replayed'?409:code==='unsupported'?422:code==='ledger_mismatch'?422:403,{error:code});
    }
