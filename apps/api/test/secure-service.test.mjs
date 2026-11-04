@@ -17,7 +17,7 @@ function stellarAccount(publicKey){
  return out;
 }
 const sepSign=(message,key)=>{
- const digest=createHash('sha256').update(Buffer.concat([Buffer.from('Stellar Signed Message:\\n'),message])).digest();
+ const digest=createHash('sha256').update(Buffer.concat([Buffer.from('Stellar Signed Message:\n'),message])).digest();
  return sign(null,digest,key).toString('base64');
 };
 const who=()=>{const {publicKey,privateKey}=generateKeyPairSync('ed25519');return {account:stellarAccount(publicKey),privateKey};};
