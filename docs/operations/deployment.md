@@ -17,13 +17,16 @@ git clone https://github.com/SoraClipse/Stellar-Reclaim.git
 cd Stellar-Reclaim
 corepack enable
 bash scripts/verify.sh
+export RECLAIM_ORIGIN=http://127.0.0.1:8787
+export RECLAIM_DB_PATH=./reclaim-testnet.sqlite
 corepack pnpm api
 ```
 
 The `verify.sh` script uses `--frozen-lockfile`, lint, TypeScript typecheck,
-all offline unit tests, build and `git diff --check`. The API runs locally
-and is **not** suitable for exposing to the public internet. See
-[the existing API/UI prototype notes](../issues-13-16.md) for route details.
+all offline unit tests, build and `git diff --check`. The authenticated SQLite API listens on loopback, enables Testnet only and is
+**not** suitable for exposing to the public internet. See the
+[secure API reference](secure-api.md) for routes and remaining integration gates.
+The old in-memory HTTP server has been deliberately disabled.
 
 ## CI and secrets
 
@@ -36,8 +39,8 @@ Passing CI demonstrates only the scoped checks, not a formal security audit.
 
 ## Before any public deployment
 
-Implement durable authenticated request/consent verification, transactional
-settlement reconciliation and deduplication, trusted proxy/HTTPS configuration,
+Complete live wallet interoperability and verified refund reconciliation,
+trusted proxy/HTTPS configuration,
 distributed abuse controls, careful privacy handling and security review.
 Confirm cross-wallet compatibility independently. Never put wallet secret
 seeds in environment variables, logs, repository settings or client-side code.
