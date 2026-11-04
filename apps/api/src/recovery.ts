@@ -39,7 +39,7 @@ export function authenticate(wallet:unknown,purpose:string,message:unknown,signa
 function decodeStrKey(str:string):Buffer{
   const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';let bits=0,value=0;const bytes:number[]=[];
   for(const ch of str){value=(value<<5)|alphabet.indexOf(ch);bits+=5;if(bits>=8){bits-=8;bytes.push((value>>>bits)&255);}}
-  return Buffer.from(bytes.slice(1,33));
+  return Buffer.from(new Uint8Array(bytes.slice(1,33)));
 }
 export function createRecovery(data:Record<string,unknown>,proof:LedgerProof,wallet:string,now=Date.now()){
   const txHash=assertTransactionHash(requireText(data.txHash,64));
