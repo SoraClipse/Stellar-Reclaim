@@ -1,52 +1,84 @@
 # Stellar Reclaim
 
-A proposed **voluntary**, non-custodial recovery-coordination protocol for mistaken Stellar payments. There is no mechanism to undo an irreversible transfer or compel repayment.
+**Development-stage, Testnet-only verification. Not audited or production-ready.**
 
-## Current state
+Stellar Reclaim is an open-source, **voluntary**, **non-custodial** coordination
+tool for requesting the return of mistaken Stellar payments. It **cannot reverse
+a settled transaction, freeze assets, compel a recipient, or send funds for a
+recipient**. A recipient may refuse without any protocol penalty.
 
-This repository has a working TypeScript workspace, a bounded read-only Stellar Horizon client, and lossless payment normalization from Issues #1–#4. The Issues #5–#8 contribution adds domain/network-bound Ed25519 ownership challenges, versioned canonical recovery request signing and verification, replay protection, and an SQLite migration plus durable request/decision/receipt persistence.
+## Implemented and not implemented
 
-Issues #9–#12 additionally implement a fail-closed recovery lifecycle, injectable sender/recipient API handlers, and operation-level voluntary refund matching. These modules are **not deployed**: the API still requires wiring to cryptographic wallet and request verification, consent verification, durable atomic persistence, and rate limiting before use.
+Implemented in this repository: exact stroop arithmetic, bounded read-only
+Horizon lookups and payment normalization, signed authentication primitives,
+recovery lifecycle logic, prototype API/UI routes, and unit tests for operation
+matching, consent transitions and refund accounting.
 
-**Not yet available:** deployed product, integrated wallet, live request/consent service, or genuine testnet refund reconciliation. Unit tests use generated keys, isolated mock ledger responses and a temporary local database, not real Stellar network settlement. No private keys are held by this service.
+**Not implemented/verified:** an audited or deployed service, full wallet
+compatibility, end-to-end durable production settlement, live Testnet recovery
+evidence, or automatic payment execution. Local API state and the demo UI
+are not a production persistence or security boundary. Unit tests and fixtures
+are not proof of live Stellar settlement.
 
-## Local development
+## Supported payments and wallets
 
-Requirements: Node >=22.16, pnpm 9.15.9 via Corepack. From repository root:
+Read-only ledger parsing covers successful classic payment and supported
+path-payment operations on explicitly selected Stellar networks; the
+voluntary refund matcher currently accepts **classic payment operations**
+only, with matching network, asset, issuer and return destination. Contract
+invocations and arbitrary operations are not eligible for refund matching.
+Only wallets providing compatible signed Ed25519 messages can use the
+prototype login workflow; Freighter-style `getAddress()/signMessage()`
+is the documented browser interface, **not a certification of compatibility**.
+Never enter or upload a wallet seed phrase.
+
+## Fresh-clone development
+
+Install Node.js >=22.16.0 and enable Corepack:
 
 ```sh
+git clone https://github.com/SoraClipse/Stellar-Reclaim.git
+cd Stellar-Reclaim
 corepack enable
 corepack pnpm install --frozen-lockfile
 corepack pnpm lint
 corepack pnpm typecheck
 corepack pnpm test
 corepack pnpm build
-corepack pnpm example -- --amount 12.3456789
+corepack pnpm api
 ```
 
-The example outputs exact stroops without floating-point rounding. Read-only client usage:
+Or run `bash scripts/verify.sh` to run the complete offline verification.
+The API is **local-development-only** and not production hardened.
+To inspect real transactions, use `StellarLedgerClient('testnet')` and the
+read-only lookup/normalization APIs; no secret key is required.
 
-```ts
-import {StellarLedgerClient,normalizePayment} from './packages/ledger/src/index.ts';
-const tx = await new StellarLedgerClient('testnet').lookup('YOUR_64_CHARACTER_TRANSACTION_HASH');
-const payment = normalizePayment(tx, 0);
-console.log(payment); // only successful supported payments
-```
+## Trust, privacy and limitations
 
-For authenticated challenges, canonical signed payload bytes, digest vectors, the SQLite API, and explicit security limitations, see [Authenticated requests and storage](docs/security-protocol.md).
-
-Never pass a secret seed to this service. The API does not sign or submit transactions. No arbitrary public RPC URLs are accepted; network identity is checked against the Stellar passphrase.
+Horizon responses are checked for network passphrase, successful transaction
+and consistent operations. Network access does not independently prove the
+honesty or availability of a Horizon server. Users must independently confirm
+recipient identity, transaction hash and asset issuer. Recovery notes and
+transaction metadata can be sensitive; do not publish identifying details,
+use public CI artifacts for private evidence, or assume public ledgers are
+private. Local prototype storage and abuse limits do not support distributed
+production guarantees. A recipient's `accepted` status is **not** a refund;
+a verified new transaction is required, and duplicate crediting must be
+prevented by transactional persistent storage.
 
 ## Documentation
 
-- [Product protocol and sequence](docs/product-spec.md)
-- [Authenticated requests and storage](docs/security-protocol.md)
-- [Recovery coordination APIs and refund matching](docs/implementation-9-12.md)
-- [Threat model and unsupported cases](docs/threat-model.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Issues](https://github.com/SoraClipse/Stellar-Reclaim/issues)
-- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+- [Development and deployment operations](docs/operations/deployment.md)
+- [Opt-in real Testnet verification (evidence pending)](docs/verification/testnet.md)
+- [Contribution guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Technical security protocol](docs/security-protocol.md)
+- [Threat model](docs/threat-model.md)
+- [Recovery coordination and refund matching](docs/implementation-9-12.md)
+- [API/UI prototype caveats](docs/issues-13-16.md)
+- [Product specification](docs/product-spec.md)
+- [Engineering roadmap](docs/ROADMAP.md)
+- [Open issues](https://github.com/SoraClipse/Stellar-Reclaim/issues)
 
-## License
-
-Apache-2.0, see [LICENSE](LICENSE). Independent open-source project, not an official SDF or Drips product.
+Apache-2.0 licensed; see [LICENSE](LICENSE). Independent project, not an
+official Stellar Development Foundation or Drips release.
