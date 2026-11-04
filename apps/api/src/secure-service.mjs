@@ -77,7 +77,7 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
     const challenge=onlyObject(body.challenge);
     if(challenge.network!==network)throw errors(403,'wrong_network');
     limiter('auth',String(challenge.account),10,60000);
-    const valid=await verifyWalletChallenge(db,challenge,body.signature,{domain:origin,network,now:now()});
+    let valid=false;\n    try{valid=await verifyWalletChallenge(db,challenge,body.signature,{domain:origin,network,now:now()});}\n    catch{throw errors(401,'invalid_signature_or_replay');}
     if(!valid)throw errors(401,'invalid_signature_or_replay');
     const token=randomBytes(32).toString('hex');
     db.db.prepare('INSERT INTO api_sessions(token_hash,account,network,origin,expires_at) VALUES(?,?,?,?,?)')
