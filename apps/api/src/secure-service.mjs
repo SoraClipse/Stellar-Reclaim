@@ -13,6 +13,7 @@ import {PASSPHRASE} from '../../../packages/core/src/index.ts';
 import {normalizePayment} from '../../../packages/ledger/src/normalize.ts';
 import {matchVoluntaryRefund,RefundMatchError} from '../../../packages/ledger/src/refund-matcher.ts';
 import {VerifiedRefundStore,RefundStoreError} from './refund-store.mjs';
+import {corroboratePayment,ProviderDisagreement} from './provider-agreement.mjs';
 import {StellarLedgerClient, LedgerError} from '../../../packages/ledger/src/client.ts';
 
 const HEX64=/^[0-9a-f]{64}$/;
@@ -33,7 +34,7 @@ export function decisionSigningBytes({domain,network,digest,decision,nonce}){
  return new TextEncoder().encode('stellar-reclaim.recipient-consent.v1\n'+PASSPHRASE[network]+'\n'+JSON.stringify({domain,network,digest,decision,nonce}));
 }
 /** A durable DB is mandatory. Mocked ledger clients are only allowed via dependency injection in tests. */
-export function createSecureService({dbPath,origin,network='testnet',ledgerFactory=n=>new StellarLedgerClient(n),now=()=>Math.floor(Date.now()/1000)}){
+export function createSecureService({dbPath,origin,network='testnet',ledgerFactory=n=>new StellarLedgerClient(n),secondaryLedgerFactory=null,now=()=>Math.floor(Date.now()/1000)}){
  if(!dbPath||dbPath===':memory:')throw new Error('RECLAIM_DB_PATH must be a durable SQLite file');
  assertDomain(origin);
  if(network!=='testnet')throw new Error('Only testnet is enabled until verified mainnet readiness');
@@ -134,9 +135,13 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
       throw errors(422,'self_refund');
     // Both transactions must be verified against finalized Horizon operations.
     const client=ledgerFactory(network);
-    const original=normalizePayment(await client.lookup(signedRequest.transactionHash),signedRequest.operationIndex);
+    const original=secondaryLedgerFactory
+      ? await corroboratePayment(client,secondaryLedgerFactory(network),signedRequest.transactionHash,signedRequest.operationIndex)
+      : normalizePayment(await client.lookup(signedRequest.transactionHash),signedRequest.operationIndex);
     if(original.type!=='payment')throw errors(422,'unsupported_payment_type');
-    const observed=normalizePayment(await client.lookup(body.transactionHash),body.operationIndex);
+    const observed=secondaryLedgerFactory
+      ? await corroboratePayment(client,secondaryLedgerFactory(network),body.transactionHash,body.operationIndex)
+      : normalizePayment(await client.lookup(body.transactionHash),body.operationIndex);
     const matched=matchVoluntaryRefund(original,observed,signedRequest.returnDestination);
     if(original.source!==signedRequest.originalSender||original.destination!==signedRequest.recipient||
        original.amount!==signedRequest.originalAmount||
@@ -144,7 +149,7 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
       throw errors(422,'original_payment_mismatch');
     const progress=verifiedRefunds.apply({digest:body.digest,refund:{network,transactionHash:observed.transactionHash,
       operationIndex:observed.operationIndex,stroops:matched.amountStroops},at:now()});
-    return response(200,{digest:body.digest,...progress});
+    return response(200,{digest:body.digest,...progress,providerAgreement:secondaryLedgerFactory?'two_sources':'single_source'});
    }
    if(request.method==='POST'&&url.pathname==='/v2/decisions'){
     const account=principal(request),body=await json(request);
@@ -175,6 +180,7 @@ export function createSecureService({dbPath,origin,network='testnet',ledgerFacto
     return response(['duplicate_refund','overpayment','not_accepted'].includes(e.code)?409:e.code==='not_found'?404:400,{error:e.code});
    }
    if(e instanceof RefundMatchError)return response(422,{error:'refund_'+e.code});
+   if(e instanceof ProviderDisagreement)return response(503,{error:'ledger_provider_disagreement'});
    if(e instanceof RequestVerificationError){
     const code=e.kind;return response(code==='replayed'?409:code==='unsupported'?422:code==='ledger_mismatch'?422:403,{error:code});
    }
