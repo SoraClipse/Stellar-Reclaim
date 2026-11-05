@@ -30,10 +30,12 @@ const payload=()=>({
  asset:{type:'native'},originalAmount:'10',requestedAmount:'4',returnDestination:sender.account,
  nonce:'b'.repeat(64),issuedAt:time,expiresAt:time+3600
 });
-function fixture(extraLookups={}){
+function fixture(extraLookups={},secondaryLookups=null){
  const dir=mkdtempSync(join(tmpdir(),'reclaim-service-'));
  const path=join(dir,'api.sqlite');
- const start=()=>createSecureService({dbPath:path,origin,now:()=>time,ledgerFactory:()=>({lookup:async h=>{if(h===hash)return original;if(extraLookups[h])return extraLookups[h];throw Error('not_found');}})});
+ const start=()=>createSecureService({dbPath:path,origin,now:()=>time,
+  ledgerFactory:()=>({lookup:async h=>{if(h===hash)return original;if(extraLookups[h])return extraLookups[h];throw Error('not_found');}}),
+  ...(secondaryLookups?{secondaryLedgerFactory:()=>({lookup:async h=>{if(h===hash)return original;if(secondaryLookups[h])return secondaryLookups[h];throw Error('not_found');}})}:{})});
  return {start,cleanup:()=>rmSync(dir,{recursive:true,force:true})};
 }
 async function call(s,method,path,body,token){
@@ -150,4 +152,37 @@ test('ledger-verified 4+6 XLM refund is durable, consent-gated and globally dedu
   assert.equal((await call(s,'POST','/v2/refunds',proof(first),to.token)).status,409);
   s.close();
  }finally{f.cleanup();}
+});
+
+test('two-source refund proof fails closed on disagreement, then verifies only after agreement',async()=>{
+ const refundHash='7'.repeat(64);
+ const payment=(to)=>({network:'testnet',transaction:{hash:refundHash,successful:true,ledger:28,operation_count:1,source_account:recipient.account},
+   operations:[{type:'payment',transaction_hash:refundHash,transaction_successful:true,from:recipient.account,to,amount:'4',asset_type:'native'}]});
+ const matching=payment(sender.account);
+ const secondary={[refundHash]:payment(outsider.account)};
+ const f=fixture({[refundHash]:matching},secondary);
+ try {
+   const s=f.start(),from=await login(s,sender),to=await login(s,recipient);
+   const request=payload(),signature=sepSign(Buffer.from(requestSigningBytes(request)),sender.privateKey);
+   const created=await call(s,'POST','/v2/requests',{request,signature},from.token);
+   assert.equal(created.status,201);
+   const digest=created.data.digest;
+   const dec={digest,decision:'accept',nonce:'8'.repeat(64)};
+   const decSig=sepSign(Buffer.from(decisionSigningBytes({domain:origin,network:'testnet',...dec})),recipient.privateKey);
+   assert.equal((await call(s,'POST','/v2/decisions',{...dec,signature:decSig},to.token)).status,200);
+   const proof={digest,transactionHash:refundHash,operationIndex:0};
+   const rejected=await call(s,'POST','/v2/refunds',proof,from.token);
+   assert.equal(rejected.status,503);
+   assert.equal(rejected.data.error,'ledger_provider_disagreement');
+   let receipt=await call(s,'GET','/v2/receipts/'+digest);
+   assert.equal(receipt.data.refundVerified,false);
+   secondary[refundHash]=matching;
+   const accepted=await call(s,'POST','/v2/refunds',proof,from.token);
+   assert.equal(accepted.status,200,JSON.stringify(accepted.data));
+   assert.equal(accepted.data.providerAgreement,'two_sources');
+   assert.equal(accepted.data.refundVerified,true);
+   receipt=await call(s,'GET','/v2/receipts/'+digest);
+   assert.equal(receipt.data.refundedStroops,'40000000');
+   s.close();
+ } finally{f.cleanup();}
 });
